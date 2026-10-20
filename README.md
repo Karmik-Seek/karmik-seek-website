@@ -9,6 +9,14 @@
 
 ---
 
+## 🌐 Live Deployments
+* **Live Frontend (Vercel):** [https://kaarmikseek.vercel.app](https://kaarmikseek.vercel.app)
+* **Live Backend (Render):** [https://karmik-seek-backend.onrender.com](https://karmik-seek-backend.onrender.com)
+* **API Documentation (Swagger):** [https://karmik-seek-backend.onrender.com/docs](https://karmik-seek-backend.onrender.com/docs)
+* **Keep-Alive Ping Endpoint:** [https://karmik-seek-backend.onrender.com/ping](https://karmik-seek-backend.onrender.com/ping)
+
+---
+
 ## 🚀 Running the Project Locally
 
 ### 1. Backend (FastAPI + MongoDB Atlas)

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
         "testathri@gmail.com": os.getenv("ADMIN_ATHRI_PASSWORD", "athri262")
     }
     UPLOAD_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads", "resumes")
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "https://kaarmikseek.vercel.app")
     
     # SMTP Email Configuration
     SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
@@ -30,6 +30,7 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
+        "https://kaarmikseek.vercel.app",
         "https://karmik-seek-website.vercel.app",
     ]
 

@@ -37,4 +37,4 @@ services:
       - key: ADMIN_EMAILS
         value: '["prajwalganiga06@gmail.com", "testathri@gmail.com"]'
       - key: FRONTEND_URL
-        value: "http://localhost:3000"
+        value: "https://kaarmikseek.vercel.app"
