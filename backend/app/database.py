@@ -1,8 +1,9 @@
 import datetime
+import certifi
 from pymongo import MongoClient
 from app.config import settings
 
-client = MongoClient(settings.MONGODB_URI)
+client = MongoClient(settings.MONGODB_URI, tlsCAFile=certifi.where())
 db = client[settings.DATABASE_NAME]
 
 def get_db():
