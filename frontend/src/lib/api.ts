@@ -1,6 +1,51 @@
 import { auth } from './firebase';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+export const BACKEND_RENDER_URL = 'https://karmik-seek-backend.onrender.com';
+export const BACKEND_LOCAL_URL = 'http://localhost:8000';
+
+/**
+ * Resolves the active Backend API base URL with the following priority:
+ * 1. Explicit NEXT_PUBLIC_API_URL environment variable (configured in Vercel or .env.local)
+ * 2. Browser runtime localStorage override ('karmik_api_url') for instant switching during local testing
+ * 3. Primary Production Live Backend: https://karmik-seek-backend.onrender.com
+ */
+export function getApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('karmik_api_url');
+    if (custom) return custom.replace(/\/+$/, '');
+  }
+
+  return BACKEND_RENDER_URL;
+}
+
+// Developer browser helpers to easily switch backends during local testing
+if (typeof window !== 'undefined') {
+  (window as any).setKarmikBackend = (target: 'render' | 'local' | string) => {
+    if (target === 'render') {
+      localStorage.setItem('karmik_api_url', BACKEND_RENDER_URL);
+      console.log(`[Kaarmik Seek] Switched to Render: ${BACKEND_RENDER_URL}`);
+    } else if (target === 'local') {
+      localStorage.setItem('karmik_api_url', BACKEND_LOCAL_URL);
+      console.log(`[Kaarmik Seek] Switched to Localhost: ${BACKEND_LOCAL_URL}`);
+    } else {
+      localStorage.setItem('karmik_api_url', target);
+      console.log(`[Kaarmik Seek] Switched to custom URL: ${target}`);
+    }
+    window.location.reload();
+  };
+
+  (window as any).resetKarmikBackend = () => {
+    localStorage.removeItem('karmik_api_url');
+    console.log('[Kaarmik Seek] Reset to default API URL');
+    window.location.reload();
+  };
+}
+
+export const API_BASE_URL = BACKEND_RENDER_URL;
 
 async function getAuthHeader(): Promise<HeadersInit> {
   const headers: Record<string, string> = {
@@ -28,9 +73,18 @@ async function getAuthHeader(): Promise<HeadersInit> {
 }
 
 export const api = {
+  get baseUrl() {
+    return getApiBaseUrl();
+  },
+
+  async ping() {
+    const res = await fetch(`${getApiBaseUrl()}/ping`);
+    return res.json();
+  },
+
   // Auth
   async loginFallback(email: string, pass: string) {
-    const res = await fetch(`${API_BASE_URL}/api/auth/login-fallback`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/auth/login-fallback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password: pass }),
@@ -44,7 +98,7 @@ export const api = {
 
   async syncUser(userData: { firebase_uid: string; email: string; full_name?: string; auth_provider?: string }) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/auth/sync`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/auth/sync`, {
       method: 'POST',
       headers,
       body: JSON.stringify(userData),
@@ -58,7 +112,7 @@ export const api = {
 
   async getMe() {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/auth/me`, { headers });
+    const res = await fetch(`${getApiBaseUrl()}/api/auth/me`, { headers });
     if (!res.ok) throw new Error('Failed to fetch user session');
     return res.json();
   },
@@ -66,14 +120,14 @@ export const api = {
   // Student Profile & Resume
   async getProfile() {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/student/profile`, { headers });
+    const res = await fetch(`${getApiBaseUrl()}/api/student/profile`, { headers });
     if (!res.ok) throw new Error('Failed to fetch profile');
     return res.json();
   },
 
   async updateProfile(profileData: Record<string, any>) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/student/profile`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/student/profile`, {
       method: 'PUT',
       headers,
       body: JSON.stringify(profileData),
@@ -96,7 +150,7 @@ export const api = {
     const formData = new FormData();
     formData.append('file', file);
 
-    const res = await fetch(`${API_BASE_URL}/api/student/resume`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/student/resume`, {
       method: 'POST',
       headers,
       body: formData,
@@ -111,13 +165,13 @@ export const api = {
   getResumeUrl(relativeUrl: string) {
     if (!relativeUrl) return '';
     if (relativeUrl.startsWith('http')) return relativeUrl;
-    return `${API_BASE_URL}${relativeUrl}`;
+    return `${getApiBaseUrl()}${relativeUrl}`;
   },
 
   // Jobs
   async getJobs(params?: { search?: string; category?: string; job_type?: string; remote?: boolean }) {
     const headers = await getAuthHeader();
-    const url = new URL(`${API_BASE_URL}/api/jobs`);
+    const url = new URL(`${getApiBaseUrl()}/api/jobs`);
     if (params?.search) url.searchParams.set('search', params.search);
     if (params?.category) url.searchParams.set('category', params.category);
     if (params?.job_type) url.searchParams.set('job_type', params.job_type);
@@ -130,14 +184,14 @@ export const api = {
 
   async getJob(id: string) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/jobs/${id}`, { headers });
+    const res = await fetch(`${getApiBaseUrl()}/api/jobs/${id}`, { headers });
     if (!res.ok) throw new Error('Failed to fetch job details');
     return res.json();
   },
 
   async createJob(jobData: Record<string, any>) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/jobs`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/jobs`, {
       method: 'POST',
       headers,
       body: JSON.stringify(jobData),
@@ -151,7 +205,7 @@ export const api = {
 
   async updateJob(id: string, jobData: Record<string, any>) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/jobs/${id}`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/jobs/${id}`, {
       method: 'PUT',
       headers,
       body: JSON.stringify(jobData),
@@ -165,7 +219,7 @@ export const api = {
 
   async deleteJob(id: string) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/jobs/${id}`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/jobs/${id}`, {
       method: 'DELETE',
       headers,
     });
@@ -176,7 +230,7 @@ export const api = {
   // Applications
   async applyToJob(jobId: string, coverLetter?: string) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/applications`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/applications`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ job_id: jobId, cover_letter: coverLetter }),
@@ -190,14 +244,14 @@ export const api = {
 
   async getMyApplications() {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/applications/my`, { headers });
+    const res = await fetch(`${getApiBaseUrl()}/api/applications/my`, { headers });
     if (!res.ok) throw new Error('Failed to fetch applications');
     return res.json();
   },
 
   async withdrawApplication(appId: string) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/applications/${appId}/withdraw`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/applications/${appId}/withdraw`, {
       method: 'DELETE',
       headers,
     });
@@ -208,14 +262,14 @@ export const api = {
   // Admin
   async getAdminStats() {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/admin/stats`, { headers });
+    const res = await fetch(`${getApiBaseUrl()}/api/admin/stats`, { headers });
     if (!res.ok) throw new Error('Failed to fetch admin stats');
     return res.json();
   },
 
   async getAdminApplicants(params?: { job_id?: string; status?: string }) {
     const headers = await getAuthHeader();
-    const url = new URL(`${API_BASE_URL}/api/admin/applicants`);
+    const url = new URL(`${getApiBaseUrl()}/api/admin/applicants`);
     if (params?.job_id) url.searchParams.set('job_id', params.job_id);
     if (params?.status) url.searchParams.set('status', params.status);
 
@@ -226,7 +280,7 @@ export const api = {
 
   async updateApplicantStatus(appId: string, status: string, note?: string, interviewDetails?: Record<string, any>) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/admin/applicants/${appId}/status`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/admin/applicants/${appId}/status`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
@@ -244,7 +298,7 @@ export const api = {
 
   async getAdminUsers(params?: { search?: string; role?: string; has_resume?: boolean }) {
     const headers = await getAuthHeader();
-    const url = new URL(`${API_BASE_URL}/api/admin/users`);
+    const url = new URL(`${getApiBaseUrl()}/api/admin/users`);
     if (params?.search) url.searchParams.set('search', params.search);
     if (params?.role) url.searchParams.set('role', params.role);
     if (params?.has_resume !== undefined) url.searchParams.set('has_resume', String(params.has_resume));
@@ -256,7 +310,7 @@ export const api = {
 
   async getAdminUserDetails(userId: string) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE_URL}/api/admin/users/${userId}`, { headers });
+    const res = await fetch(`${getApiBaseUrl()}/api/admin/users/${userId}`, { headers });
     if (!res.ok) throw new Error('Failed to fetch user dossier');
     return res.json();
   },
