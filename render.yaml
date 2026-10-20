@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: karmik-seek-backend
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /ping
+    envVars:
+      - key: DATABASE_NAME
+        value: karmik_seek
+      - key: FIREBASE_PROJECT_ID
+        value: karmik-seek
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: karmikseek@gmail.com
+      - key: SMTP_FROM_NAME
+        value: Kaarmik Seek
+      - key: SMTP_FROM_EMAIL
+        value: karmikseek@gmail.com
+      - key: EMAIL_ENABLED
+        value: "true"
+      # Sensitive variables should be filled in Render Dashboard or synced
+      - key: MONGODB_URI
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: ADMIN_DEFAULT_PASSWORD
+        sync: false
+      - key: ADMIN_ATHRI_PASSWORD
+        sync: false
+      - key: ADMIN_EMAILS
+        value: '["prajwalganiga06@gmail.com", "testathri@gmail.com"]'
+      - key: FRONTEND_URL
+        value: "http://localhost:3000"
