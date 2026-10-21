@@ -9,3 +9,5 @@ python-multipart>=0.0.9
 pyjwt>=2.8.0
 requests>=2.31.0
 firebase-admin>=6.4.0
+cloudinary>=1.40.0
+slowapi>=0.1.9

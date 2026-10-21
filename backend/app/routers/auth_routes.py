@@ -1,19 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from app.models.schemas import UserSyncRequest, UserResponse, LoginFallbackRequest
 from app.database import get_db
 from app.config import settings
 from app.auth.firebase_auth import get_current_user
 from app.services.email_service import send_welcome_email
+from app.limiter import limiter
 import datetime
 import jwt
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/login-fallback")
-def login_fallback(req: LoginFallbackRequest):
+@limiter.limit("5/minute")
+def login_fallback(request: Request, req: LoginFallbackRequest):
     """
     Fallback authentication endpoint for the seeded admin and student users,
     used if Firebase Auth client encounters configuration errors or delays.
+    Cryptographically signed with strong server-side secret and 4-hour expiry.
     """
     db = get_db()
     email_clean = req.email.lower().strip()
@@ -49,14 +52,15 @@ def login_fallback(req: LoginFallbackRequest):
             db.users.update_one({"_id": user["_id"]}, {"$set": {"role": "admin"}})
             user["role"] = "admin"
 
-    # Generate JWT token
+    # Generate JWT token with secure secret key and issuer
     token_payload = {
         "user_id": str(user["_id"]),
         "email": user["email"],
         "role": user.get("role", "student"),
-        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
+        "iss": "karmik_backend",
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=4)
     }
-    token = jwt.encode(token_payload, "karmik_fallback_secret", algorithm="HS256")
+    token = jwt.encode(token_payload, settings.JWT_SECRET_KEY, algorithm="HS256")
 
     profile = None
     if user.get("role") == "student":
@@ -78,7 +82,8 @@ def login_fallback(req: LoginFallbackRequest):
     }
 
 @router.post("/sync")
-def sync_user(req: UserSyncRequest, background_tasks: BackgroundTasks):
+@limiter.limit("20/minute")
+def sync_user(request: Request, req: UserSyncRequest, background_tasks: BackgroundTasks):
     """
     Syncs a user authenticated via Firebase into MongoDB Atlas.
     Automatically identifies and sets the admin role for prajwalganiga06@gmail.com.

@@ -162,6 +162,36 @@ export const api = {
     return res.json();
   },
 
+  async getMyResumeLink(): Promise<{ url: string }> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${getApiBaseUrl()}/api/student/resume/me/link`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to retrieve resume download link');
+    }
+    return res.json();
+  },
+
+  async getApplicantResumeLink(appId: string): Promise<{ url: string }> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${getApiBaseUrl()}/api/admin/applicants/${appId}/resume-link`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to retrieve applicant resume link');
+    }
+    return res.json();
+  },
+
+  async getUserResumeLink(userId: string): Promise<{ url: string }> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${getApiBaseUrl()}/api/admin/users/${userId}/resume-link`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to retrieve user resume link');
+    }
+    return res.json();
+  },
+
   getResumeUrl(relativeUrl: string) {
     if (!relativeUrl) return '';
     if (relativeUrl.startsWith('http')) return relativeUrl;

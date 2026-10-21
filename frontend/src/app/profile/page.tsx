@@ -341,15 +341,21 @@ export default function ProfilePage() {
                       <p className="text-sm font-semibold" style={{ color: 'var(--color-ink)' }}>
                         {form.resume_name}
                       </p>
-                      <a
-                        href={api.getResumeUrl(form.resume_url || '')}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs font-semibold hover:underline inline-flex items-center gap-1 mt-0.5"
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await api.getMyResumeLink();
+                            window.open(res.url, '_blank', 'noopener,noreferrer');
+                          } catch (e: any) {
+                            showToast('error', e.message || 'Failed to open resume');
+                          }
+                        }}
+                        className="text-xs font-semibold hover:underline inline-flex items-center gap-1 mt-0.5 cursor-pointer bg-transparent border-none p-0"
                         style={{ color: 'var(--color-plum-700)' }}
                       >
                         View / Download Resume <ExternalLink size={11} />
-                      </a>
+                      </button>
                     </div>
                   </div>
                 ) : (

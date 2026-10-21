@@ -1,16 +1,19 @@
 import datetime
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from app.models.schemas import ApplicationCreate
 from app.auth.firebase_auth import get_current_user
 from app.database import get_db
 from app.services.matching_service import calculate_match_score
 from app.services.email_service import send_application_received_email
+from app.limiter import limiter
 
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
 @router.post("")
+@limiter.limit("10/minute")
 def apply_to_job(
+    request: Request,
     data: ApplicationCreate,
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user)

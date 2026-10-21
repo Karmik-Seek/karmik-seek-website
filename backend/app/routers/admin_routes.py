@@ -1,11 +1,13 @@
 import datetime
 from bson import ObjectId
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from app.models.schemas import StatusUpdate
 from app.auth.firebase_auth import require_admin
 from app.database import get_db
 from app.services.email_service import send_status_update_email
+from app.limiter import limiter
+from app.services.cloudinary_service import generate_signed_resume_url
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -91,8 +93,39 @@ def get_all_applicants(
 
     return result
 
+@router.get("/applicants/{app_id}/resume-link")
+def get_applicant_resume_link(app_id: str, current_user: dict = Depends(require_admin)):
+    """
+    Generates a secure, 5-minute signed Cloudinary download URL for an applicant's resume.
+    Accessible only by administrators.
+    """
+    db = get_db()
+    try:
+        oid = ObjectId(app_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid application ID")
+
+    app_doc = db.applications.find_one({"_id": oid})
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    prof = db.student_profiles.find_one({
+        "$or": [
+            {"email": app_doc.get("student_email")},
+            {"user_id": app_doc.get("student_id")}
+        ]
+    })
+    resume = prof.get("resume") if prof else None
+    if not resume or not resume.get("public_id"):
+        raise HTTPException(status_code=404, detail="Applicant has not uploaded a resume")
+
+    signed_url = generate_signed_resume_url(resume["public_id"], ttl_seconds=300)
+    return {"url": signed_url}
+
 @router.patch("/applicants/{app_id}/status")
+@limiter.limit("60/minute")
 def update_applicant_status(
+    request: Request,
     app_id: str,
     update: StatusUpdate,
     background_tasks: BackgroundTasks,
@@ -269,3 +302,26 @@ def get_user_details(
     user["applications"] = apps
 
     return user
+
+@router.get("/users/{user_id}/resume-link")
+def get_user_resume_link(user_id: str, current_user: dict = Depends(require_admin)):
+    """
+    Generates a secure, 5-minute signed Cloudinary download URL for a user's resume.
+    Accessible only by administrators.
+    """
+    db = get_db()
+    try:
+        oid = ObjectId(user_id)
+        user = db.users.find_one({"_id": oid})
+    except Exception:
+        user = db.users.find_one({"email": user_id})
+
+    email = user.get("email") if user else user_id
+    prof = db.student_profiles.find_one({"$or": [{"user_id": user_id}, {"email": email}]})
+    resume = prof.get("resume") if prof else None
+    if not resume or not resume.get("public_id"):
+        raise HTTPException(status_code=404, detail="Student has not uploaded a resume")
+
+    signed_url = generate_signed_resume_url(resume["public_id"], ttl_seconds=300)
+    return {"url": signed_url}
+

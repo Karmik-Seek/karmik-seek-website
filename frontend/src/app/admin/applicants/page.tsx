@@ -370,14 +370,20 @@ function AdminApplicantsContent() {
                         {selectedApp.student_profile.resume_name || 'Resume Document'}
                       </span>
                     </div>
-                    <a
-                      href={api.getResumeUrl(selectedApp.student_profile.resume_url)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1"
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await api.getApplicantResumeLink(selectedApp.id);
+                          window.open(res.url, '_blank', 'noopener,noreferrer');
+                        } catch (e: any) {
+                          showToast('error', e.message || 'Failed to open applicant resume');
+                        }
+                      }}
+                      className="btn btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1 cursor-pointer"
                     >
                       View Resume <ExternalLink size={12} />
-                    </a>
+                    </button>
                   </div>
                 ) : (
                   <p className="text-xs italic" style={{ color: 'var(--color-ink-muted)' }}>

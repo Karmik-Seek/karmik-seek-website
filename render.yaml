@@ -6,7 +6,7 @@ services:
     plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
     healthCheckPath: /ping
     envVars:
       - key: DATABASE_NAME
@@ -25,7 +25,7 @@ services:
         value: karmikseek@gmail.com
       - key: EMAIL_ENABLED
         value: "true"
-      # Sensitive variables should be filled in Render Dashboard or synced
+      # Sensitive variables configured in Render Dashboard
       - key: MONGODB_URI
         sync: false
       - key: SMTP_PASSWORD
@@ -38,3 +38,7 @@ services:
         value: '["prajwalganiga06@gmail.com", "testathri@gmail.com"]'
       - key: FRONTEND_URL
         value: "https://kaarmikseek.vercel.app"
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false

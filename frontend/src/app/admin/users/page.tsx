@@ -27,6 +27,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import StatusBadge from '@/components/StatusBadge';
 import { LoadingSpinner, EmptyState } from '@/components/Feedback';
+import { useToast } from '@/components/Toast';
 
 interface UserDirectoryItem {
   id: string;
@@ -67,6 +68,7 @@ export default function AdminUsersPage() {
 function AdminUsersContent() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const { showToast } = useToast();
 
   const [users, setUsers] = useState<UserDirectoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -630,14 +632,20 @@ function AdminUsersContent() {
                               </span>
                             </div>
                           </div>
-                          <a
-                            href={api.getResumeUrl(selectedUser.profile.resume_url)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-primary text-xs py-1.5 px-3.5 inline-flex items-center gap-1"
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const res = await api.getUserResumeLink(selectedUser.id);
+                                window.open(res.url, '_blank', 'noopener,noreferrer');
+                              } catch (e: any) {
+                                showToast('error', e.message || 'Failed to open user resume');
+                              }
+                            }}
+                            className="btn btn-primary text-xs py-1.5 px-3.5 inline-flex items-center gap-1 cursor-pointer"
                           >
                             View / Download <ExternalLink size={12} />
-                          </a>
+                          </button>
                         </div>
                       ) : (
                         <p className="text-xs italic" style={{ color: 'var(--color-ink-muted)' }}>

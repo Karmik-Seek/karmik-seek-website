@@ -1,12 +1,13 @@
-import os
 import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 from app.config import settings
 from app.database import init_db_and_seed
+from app.limiter import limiter
 from app.routers import auth_routes, student_routes, job_routes, application_routes, admin_routes
 
 @asynccontextmanager
@@ -20,26 +21,30 @@ async def lifespan(app: FastAPI):
     yield
     print("[INFO] Shutting down Kaarmik Seek Backend.")
 
+is_prod = settings.ENV.lower() == "production"
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url=None if is_prod else "/docs",
+    redoc_url=None if is_prod else "/redoc",
+    openapi_url=None if is_prod else "/openapi.json"
 )
 
-# CORS Middleware - allows localhost, Vercel deployments (*.vercel.app), and custom domains
+# Attach rate limiter and exception handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Secure CORS Middleware (Finding 4):
+# Explicit origins, strict project preview regex, no wildcard origins, allow_credentials=False
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_origin_regex=r"^https?://.*",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origin_regex=r"^https://(kaarmikseek|karmik-seek-website(-[a-z0-9-]+)?)\.vercel\.app$",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
-
-# Mount resume uploads directory if it exists
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=os.path.dirname(settings.UPLOAD_DIR)), name="uploads")
 
 # Include Routers
 app.include_router(auth_routes.router)
