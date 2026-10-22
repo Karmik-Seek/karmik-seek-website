@@ -72,7 +72,18 @@ export default function MyApplicationsPage() {
     }
   };
 
-  if (authLoading || loading) return <LoadingSpinner label="Loading application tracking..." />;
+  if (!user && authLoading) {
+    return (
+      <div className="min-h-dvh px-4 py-10 sm:px-6 lg:px-8 animate-pulse" style={{ background: 'var(--color-cream-100)' }}>
+        <div className="mx-auto max-w-5xl space-y-8">
+          <div className="h-10 w-64 bg-black/10 rounded-lg" />
+          <div className="h-48 bg-black/5 rounded-[var(--radius-card)]" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   // Filter applications by tab
   const filteredApps = applications.filter((app) => {
@@ -134,7 +145,17 @@ export default function MyApplicationsPage() {
         </div>
 
         {/* Applications List */}
-        {filteredApps.length === 0 ? (
+        {loading ? (
+          <div className="space-y-6 animate-pulse">
+            {[1, 2].map((i) => (
+              <div key={i} className="glass rounded-[var(--radius-card)] p-6 sm:p-7 space-y-4" style={{ border: '1px solid rgb(255 255 255 / 0.65)' }}>
+                <div className="h-6 bg-black/10 rounded w-1/3" />
+                <div className="h-4 bg-black/5 rounded w-1/2" />
+                <div className="h-10 bg-black/5 rounded-lg w-full" />
+              </div>
+            ))}
+          </div>
+        ) : filteredApps.length === 0 ? (
           <EmptyState
             icon={FileText}
             title="No applications in this view"

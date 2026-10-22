@@ -47,6 +47,38 @@ if (typeof window !== 'undefined') {
 
 export const API_BASE_URL = BACKEND_RENDER_URL;
 
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+const memoryCache = new Map<string, CacheEntry<any>>();
+
+export function getClientCached<T>(key: string, maxAgeMs: number = 45000): T | null {
+  const entry = memoryCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > maxAgeMs) {
+    memoryCache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+}
+
+export function setClientCached<T>(key: string, data: T) {
+  memoryCache.set(key, { data, timestamp: Date.now() });
+}
+
+export function invalidateClientCache(prefix?: string) {
+  if (!prefix) {
+    memoryCache.clear();
+    return;
+  }
+  for (const k of Array.from(memoryCache.keys())) {
+    if (k.startsWith(prefix)) {
+      memoryCache.delete(k);
+    }
+  }
+}
+
 async function getAuthHeader(): Promise<HeadersInit> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -166,11 +198,18 @@ export const api = {
   },
 
   // Student Profile & Resume
-  async getProfile() {
+  async getProfile(forceRefresh: boolean = false) {
+    const cacheKey = 'student_profile';
+    if (!forceRefresh) {
+      const cached = getClientCached<any>(cacheKey, 60000);
+      if (cached) return cached;
+    }
     const headers = await getAuthHeader();
     const res = await fetch(`${getApiBaseUrl()}/api/student/profile`, { headers });
     if (!res.ok) throw new Error('Failed to fetch profile');
-    return res.json();
+    const data = await res.json();
+    setClientCached(cacheKey, data);
+    return data;
   },
 
   async updateProfile(profileData: Record<string, any>) {
@@ -184,6 +223,7 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to update profile');
     }
+    invalidateClientCache('student_profile');
     return res.json();
   },
 
@@ -207,6 +247,8 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to upload resume');
     }
+    invalidateClientCache('student_profile');
+    invalidateClientCache('admin_users');
     return res.json();
   },
 
@@ -247,7 +289,13 @@ export const api = {
   },
 
   // Jobs
-  async getJobs(params?: { search?: string; category?: string; job_type?: string; remote?: boolean }) {
+  async getJobs(params?: { search?: string; category?: string; job_type?: string; remote?: boolean }, forceRefresh: boolean = false) {
+    const cacheKey = `jobs_${JSON.stringify(params || {})}`;
+    if (!forceRefresh) {
+      const cached = getClientCached<any[]>(cacheKey, 30000);
+      if (cached) return cached;
+    }
+
     const headers = await getAuthHeader();
     const url = new URL(`${getApiBaseUrl()}/api/jobs`);
     if (params?.search) url.searchParams.set('search', params.search);
@@ -257,14 +305,22 @@ export const api = {
 
     const res = await fetch(url.toString(), { headers });
     if (!res.ok) throw new Error('Failed to fetch jobs');
-    return res.json();
+    const data = await res.json();
+    setClientCached(cacheKey, data);
+    return data;
   },
 
   async getJob(id: string) {
+    const cacheKey = `job_${id}`;
+    const cached = getClientCached<any>(cacheKey, 60000);
+    if (cached) return cached;
+
     const headers = await getAuthHeader();
     const res = await fetch(`${getApiBaseUrl()}/api/jobs/${id}`, { headers });
     if (!res.ok) throw new Error('Failed to fetch job details');
-    return res.json();
+    const data = await res.json();
+    setClientCached(cacheKey, data);
+    return data;
   },
 
   async createJob(jobData: Record<string, any>) {
@@ -278,6 +334,8 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to create job');
     }
+    invalidateClientCache('jobs');
+    invalidateClientCache('admin_stats');
     return res.json();
   },
 
@@ -292,6 +350,9 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to update job');
     }
+    invalidateClientCache('jobs');
+    invalidateClientCache('admin_stats');
+    invalidateClientCache(`job_${id}`);
     return res.json();
   },
 
@@ -302,6 +363,8 @@ export const api = {
       headers,
     });
     if (!res.ok) throw new Error('Failed to delete job');
+    invalidateClientCache('jobs');
+    invalidateClientCache('admin_stats');
     return res.json();
   },
 
@@ -317,14 +380,25 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to apply');
     }
+    invalidateClientCache('my_applications');
+    invalidateClientCache('admin_applicants');
+    invalidateClientCache('admin_stats');
     return res.json();
   },
 
-  async getMyApplications() {
+  async getMyApplications(forceRefresh: boolean = false) {
+    const cacheKey = 'my_applications';
+    if (!forceRefresh) {
+      const cached = getClientCached<any[]>(cacheKey, 30000);
+      if (cached) return cached;
+    }
+
     const headers = await getAuthHeader();
     const res = await fetch(`${getApiBaseUrl()}/api/applications/my`, { headers });
     if (!res.ok) throw new Error('Failed to fetch applications');
-    return res.json();
+    const data = await res.json();
+    setClientCached(cacheKey, data);
+    return data;
   },
 
   async withdrawApplication(appId: string) {
@@ -334,18 +408,35 @@ export const api = {
       headers,
     });
     if (!res.ok) throw new Error('Failed to withdraw application');
+    invalidateClientCache('my_applications');
+    invalidateClientCache('admin_applicants');
+    invalidateClientCache('admin_stats');
     return res.json();
   },
 
   // Admin
-  async getAdminStats() {
+  async getAdminStats(forceRefresh: boolean = false) {
+    const cacheKey = 'admin_stats';
+    if (!forceRefresh) {
+      const cached = getClientCached<any>(cacheKey, 30000);
+      if (cached) return cached;
+    }
+
     const headers = await getAuthHeader();
     const res = await fetch(`${getApiBaseUrl()}/api/admin/stats`, { headers });
     if (!res.ok) throw new Error('Failed to fetch admin stats');
-    return res.json();
+    const data = await res.json();
+    setClientCached(cacheKey, data);
+    return data;
   },
 
-  async getAdminApplicants(params?: { job_id?: string; status?: string }) {
+  async getAdminApplicants(params?: { job_id?: string; status?: string }, forceRefresh: boolean = false) {
+    const cacheKey = `admin_applicants_${JSON.stringify(params || {})}`;
+    if (!forceRefresh) {
+      const cached = getClientCached<any[]>(cacheKey, 20000);
+      if (cached) return cached;
+    }
+
     const headers = await getAuthHeader();
     const url = new URL(`${getApiBaseUrl()}/api/admin/applicants`);
     if (params?.job_id) url.searchParams.set('job_id', params.job_id);
@@ -353,7 +444,9 @@ export const api = {
 
     const res = await fetch(url.toString(), { headers });
     if (!res.ok) throw new Error('Failed to fetch applicants');
-    return res.json();
+    const data = await res.json();
+    setClientCached(cacheKey, data);
+    return data;
   },
 
   async updateApplicantStatus(appId: string, status: string, note?: string, interviewDetails?: Record<string, any>) {
@@ -371,10 +464,18 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to update applicant status');
     }
+    invalidateClientCache('admin_applicants');
+    invalidateClientCache('admin_stats');
     return res.json();
   },
 
-  async getAdminUsers(params?: { search?: string; role?: string; has_resume?: boolean }) {
+  async getAdminUsers(params?: { search?: string; role?: string; has_resume?: boolean }, forceRefresh: boolean = false) {
+    const cacheKey = `admin_users_${JSON.stringify(params || {})}`;
+    if (!forceRefresh) {
+      const cached = getClientCached<any[]>(cacheKey, 30000);
+      if (cached) return cached;
+    }
+
     const headers = await getAuthHeader();
     const url = new URL(`${getApiBaseUrl()}/api/admin/users`);
     if (params?.search) url.searchParams.set('search', params.search);
@@ -383,7 +484,9 @@ export const api = {
 
     const res = await fetch(url.toString(), { headers });
     if (!res.ok) throw new Error('Failed to fetch users directory');
-    return res.json();
+    const data = await res.json();
+    setClientCached(cacheKey, data);
+    return data;
   },
 
   async getAdminUserDetails(userId: string) {

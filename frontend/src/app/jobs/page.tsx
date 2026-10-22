@@ -214,7 +214,26 @@ export default function JobDiscoveryPage() {
 
         {/* Grid */}
         {loading ? (
-          <LoadingSpinner label="Loading open roles…" />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div
+                key={i}
+                className="glass rounded-[var(--radius-card)] p-5 space-y-3 animate-pulse"
+                style={{ border: '1px solid rgb(255 255 255 / 0.7)' }}
+              >
+                <div className="flex justify-between items-start">
+                  <div className="h-5 w-3/4 bg-black/10 rounded" />
+                  <div className="h-4 w-12 bg-black/10 rounded-full" />
+                </div>
+                <div className="h-4 w-1/2 bg-black/10 rounded" />
+                <div className="h-3 w-1/3 bg-black/5 rounded" />
+                <div className="pt-2 flex gap-1.5">
+                  <div className="h-5 w-14 bg-black/10 rounded-full" />
+                  <div className="h-5 w-16 bg-black/10 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : jobs.length === 0 ? (
           <EmptyState
             icon={Briefcase}

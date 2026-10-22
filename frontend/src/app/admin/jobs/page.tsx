@@ -158,7 +158,18 @@ export default function AdminJobsPage() {
     }
   };
 
-  if (authLoading || loading) return <LoadingSpinner label="Loading roles inventory..." />;
+  if (!user && authLoading) {
+    return (
+      <div className="min-h-dvh px-4 py-10 sm:px-6 lg:px-8 animate-pulse" style={{ background: 'var(--color-cream-100)' }}>
+        <div className="mx-auto max-w-7xl space-y-6">
+          <div className="h-10 w-64 bg-black/10 rounded-lg" />
+          <div className="h-64 bg-black/5 rounded-[var(--radius-card)]" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   return (
     <div
@@ -188,7 +199,25 @@ export default function AdminJobsPage() {
         </div>
 
         {/* Jobs Table / Cards */}
-        {jobs.length === 0 ? (
+        {loading ? (
+          <div
+            className="glass rounded-[var(--radius-card)] overflow-hidden divide-y animate-pulse"
+            style={{
+              borderColor: 'var(--color-cream-300)',
+              border: '1px solid rgb(255 255 255 / 0.7)',
+            }}
+          >
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-2 flex-1">
+                  <div className="h-5 bg-black/10 rounded w-1/3" />
+                  <div className="h-4 bg-black/5 rounded w-1/2" />
+                </div>
+                <div className="h-8 bg-black/10 rounded-xl w-32" />
+              </div>
+            ))}
+          </div>
+        ) : jobs.length === 0 ? (
           <EmptyState
             icon={Briefcase}
             title="No jobs created yet"

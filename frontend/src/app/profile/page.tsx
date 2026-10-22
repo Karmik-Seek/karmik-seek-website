@@ -173,7 +173,45 @@ export default function ProfilePage() {
     }));
   };
 
-  if (authLoading || loading) return <LoadingSpinner label="Loading your profile..." />;
+  if (authLoading || loading) {
+    return (
+      <div
+        className="min-h-dvh px-4 py-10 sm:px-6 lg:px-8"
+        style={{ background: 'var(--color-cream-100)' }}
+      >
+        <div className="mx-auto max-w-4xl space-y-8 animate-pulse">
+          <div className="pb-6 border-b" style={{ borderColor: 'var(--color-cream-300)' }}>
+            <div className="h-4 w-28 bg-black/10 rounded-full mb-3" />
+            <div className="h-9 w-60 bg-black/15 rounded-lg mb-2" />
+            <div className="h-4 w-96 max-w-full bg-black/10 rounded" />
+          </div>
+
+          <div className="space-y-6">
+            <div
+              className="glass rounded-[var(--radius-card)] p-6 sm:p-7 space-y-5"
+              style={{ border: '1px solid rgb(255 255 255 / 0.7)' }}
+            >
+              <div className="h-5 w-40 bg-black/15 rounded" />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="h-10 bg-black/5 rounded-lg" />
+                <div className="h-10 bg-black/5 rounded-lg" />
+                <div className="h-10 bg-black/5 rounded-lg" />
+                <div className="h-10 bg-black/5 rounded-lg" />
+              </div>
+            </div>
+
+            <div
+              className="glass rounded-[var(--radius-card)] p-6 sm:p-7 space-y-5"
+              style={{ border: '1px solid rgb(255 255 255 / 0.7)' }}
+            >
+              <div className="h-5 w-32 bg-black/15 rounded" />
+              <div className="h-24 bg-black/5 rounded-lg" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -85,7 +85,48 @@ function JobDetailsContent() {
     }
   };
 
-  if (loading) return <LoadingSpinner label="Loading job details..." />;
+  if (loading) {
+    return (
+      <div
+        className="min-h-dvh px-4 py-8 sm:px-6 lg:px-8"
+        style={{ background: 'var(--color-cream-100)' }}
+      >
+        <div className="mx-auto max-w-5xl space-y-6 animate-pulse">
+          <div className="h-4 w-28 bg-black/10 rounded" />
+          <div className="grid gap-8 lg:grid-cols-3 items-start">
+            <div className="lg:col-span-2 space-y-6">
+              <div
+                className="glass rounded-[var(--radius-card)] p-6 sm:p-8 space-y-6"
+                style={{ border: '1px solid rgb(255 255 255 / 0.7)' }}
+              >
+                <div className="flex items-start gap-4">
+                  <div className="h-14 w-14 rounded-2xl bg-black/10 shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-6 w-3/4 bg-black/15 rounded" />
+                    <div className="h-4 w-1/2 bg-black/10 rounded" />
+                  </div>
+                </div>
+                <div className="space-y-3 pt-4">
+                  <div className="h-4 w-full bg-black/5 rounded" />
+                  <div className="h-4 w-5/6 bg-black/5 rounded" />
+                  <div className="h-4 w-2/3 bg-black/5 rounded" />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-6">
+              <div
+                className="glass rounded-[var(--radius-card)] p-6 space-y-4"
+                style={{ border: '1px solid rgb(255 255 255 / 0.7)' }}
+              >
+                <div className="h-5 w-32 bg-black/15 rounded" />
+                <div className="h-10 w-full bg-black/10 rounded-xl" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (error || !job) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16 text-center">
