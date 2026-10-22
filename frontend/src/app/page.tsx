@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight, CheckCircle2, TrendingUp, Sparkles, Clock, Briefcase } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api';
 
 /* ─── Ambient Backdrop ──────────────────────────────────────────────────── */
 function AmbientBackdrop() {
@@ -189,6 +190,10 @@ function IntroExperience() {
 export default function Home() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+
+  React.useEffect(() => {
+    api.warmup();
+  }, []);
 
   const primaryHref = user
     ? isAdmin ? '/admin' : '/dashboard'

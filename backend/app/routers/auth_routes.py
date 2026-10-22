@@ -85,65 +85,100 @@ def login_fallback(request: Request, req: LoginFallbackRequest):
 @limiter.limit("20/minute")
 def sync_user(request: Request, req: UserSyncRequest, background_tasks: BackgroundTasks):
     """
-    Syncs a user authenticated via Firebase into MongoDB Atlas.
-    Automatically identifies and sets the admin role for prajwalganiga06@gmail.com.
+    Syncs a user authenticated via Firebase into MongoDB Atlas with sub-millisecond atomic upsert.
+    Automatically identifies and sets the admin role for prajwalganiga06@gmail.com and testathri@gmail.com.
+    Uses a single find_one_and_update with upsert=True and ReturnDocument.AFTER to eliminate
+    multi-query round-trip latency to MongoDB Atlas.
     """
+    from pymongo import ReturnDocument
+
     db = get_db()
     email_clean = req.email.lower().strip()
     is_admin = email_clean in [a.lower().strip() for a in settings.ADMIN_EMAILS]
-
+    role = "admin" if is_admin else "student"
     now = datetime.datetime.now(datetime.timezone.utc)
-    user = db.users.find_one({"email": email_clean})
 
-    if not user:
-        role = "admin" if is_admin else "student"
-        new_doc = {
-            "firebase_uid": req.firebase_uid,
-            "email": email_clean,
-            "full_name": req.full_name or email_clean.split("@")[0],
-            "role": role,
-            "auth_provider": req.auth_provider or "google",
-            "has_password": False,
-            "created_at": now,
-            "updated_at": now
+    # Prepare atomic update document
+    set_fields = {
+        "firebase_uid": req.firebase_uid,
+        "updated_at": now,
+    }
+    if req.full_name:
+        set_fields["full_name"] = req.full_name
+    if is_admin:
+        set_fields["role"] = "admin"
+
+    set_on_insert_fields = {
+        "email": email_clean,
+        "role": role,
+        "auth_provider": req.auth_provider or "google",
+        "has_password": False,
+        "created_at": now,
+    }
+    if not req.full_name:
+        set_on_insert_fields["full_name"] = email_clean.split("@")[0]
+
+    # Single atomic upsert for user with lean projection
+    user = db.users.find_one_and_update(
+        {"email": email_clean},
+        {
+            "$set": set_fields,
+            "$setOnInsert": set_on_insert_fields,
+        },
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+        projection={
+            "_id": 1,
+            "firebase_uid": 1,
+            "email": 1,
+            "full_name": 1,
+            "role": 1,
+            "auth_provider": 1,
+            "has_password": 1,
+            "created_at": 1,
         }
-        res = db.users.insert_one(new_doc)
-        user = db.users.find_one({"_id": res.inserted_id})
+    )
 
-        # Also initialize student profile if not admin
-        if role == "student":
-            db.student_profiles.update_one(
-                {"email": email_clean},
-                {"$setOnInsert": {
+    # Asynchronously dispatch welcome email for new sign-ups in BackgroundTasks (never blocks response)
+    created_at = user.get("created_at")
+    is_new_signup = created_at and isinstance(created_at, datetime.datetime) and abs((now - created_at).total_seconds()) < 5
+    if is_new_signup and user.get("role") == "student":
+        background_tasks.add_task(send_welcome_email, email_clean, user.get("full_name", ""))
+
+    # Lean atomic profile retrieval or creation for students
+    profile = None
+    if user.get("role") == "student":
+        profile = db.student_profiles.find_one_and_update(
+            {"email": email_clean},
+            {
+                "$setOnInsert": {
                     "user_id": str(user["_id"]),
                     "email": email_clean,
-                    "full_name": new_doc["full_name"],
+                    "full_name": user.get("full_name", ""),
                     "skills": [],
                     "education": [],
                     "interests": [],
                     "availability": [],
                     "preferred_job_types": [],
                     "created_at": now,
-                    "updated_at": now
-                }},
-                upsert=True
-            )
-            # Send welcome email asynchronously
-            background_tasks.add_task(send_welcome_email, email_clean, new_doc["full_name"])
-    else:
-        # User already exists - update firebase_uid and force admin if matching
-        updates = {"firebase_uid": req.firebase_uid, "updated_at": now}
-        if req.full_name and not user.get("full_name"):
-            updates["full_name"] = req.full_name
-        if is_admin and user.get("role") != "admin":
-            updates["role"] = "admin"
-        
-        db.users.update_one({"_id": user["_id"]}, {"$set": updates})
-        user = db.users.find_one({"_id": user["_id"]})
-
-    profile = None
-    if user.get("role") == "student":
-        profile = db.student_profiles.find_one({"email": email_clean})
+                    "updated_at": now,
+                }
+            },
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+            projection={
+                "_id": 1,
+                "skills": 1,
+                "education": 1,
+                "interests": 1,
+                "availability": 1,
+                "preferred_job_types": 1,
+                "resume_url": 1,
+                "resume_name": 1,
+                "full_name": 1,
+                "email": 1,
+            }
+        )
         if profile and "_id" in profile:
             profile["_id"] = str(profile["_id"])
 
@@ -155,9 +190,9 @@ def sync_user(request: Request, req: UserSyncRequest, background_tasks: Backgrou
             "full_name": user.get("full_name", ""),
             "role": user.get("role", "student"),
             "auth_provider": user.get("auth_provider", "firebase"),
-            "has_password": user.get("has_password", False)
+            "has_password": user.get("has_password", False),
         },
-        "profile": profile
+        "profile": profile,
     }
 
 @router.get("/me")

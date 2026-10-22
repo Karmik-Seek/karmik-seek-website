@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Mail, Lock, User, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/components/Toast';
+import { api } from '@/lib/api';
 
 function GoogleIcon() {
   return (
@@ -21,7 +22,7 @@ function GoogleIcon() {
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { registerWithEmail, loginWithGoogle } = useAuth();
+  const { user, registerWithEmail, loginWithGoogle } = useAuth();
   const { showToast } = useToast();
 
   const [fullName, setFullName] = useState('');
@@ -30,44 +31,107 @@ export default function RegisterPage() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [slowNotice, setSlowNotice] = useState(false);
   const [error, setError] = useState('');
+
+  const slowTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Prefetch target routes and warmup backend on mount
+  useEffect(() => {
+    router.prefetch('/dashboard');
+    router.prefetch('/admin');
+    api.warmup();
+  }, [router]);
+
+  // If already authenticated with cached session, redirect immediately
+  useEffect(() => {
+    if (user && !loading && !googleLoading) {
+      router.replace(user.role === 'admin' ? '/admin' : '/dashboard');
+    }
+  }, [user, loading, googleLoading, router]);
+
+  // Cleanup slow server timer on unmount
+  useEffect(() => {
+    return () => {
+      if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+    };
+  }, []);
+
+  const startSlowTimer = () => {
+    setSlowNotice(false);
+    if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+    slowTimerRef.current = setTimeout(() => {
+      setSlowNotice(true);
+    }, 3000);
+  };
+
+  const clearSlowTimer = () => {
+    if (slowTimerRef.current) {
+      clearTimeout(slowTimerRef.current);
+      slowTimerRef.current = null;
+    }
+    setSlowNotice(false);
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    if (!fullName.trim()) {
+      setError('Please enter your full name.');
+      return;
+    }
+    if (!email.trim()) {
+      setError('Please enter a valid email address.');
+      return;
+    }
     if (password.length < 6) {
       setError('Password must be at least 6 characters.');
       return;
     }
+
+    setError('');
     setLoading(true);
+    startSlowTimer();
+
     try {
-      const newUser = await registerWithEmail(email, password, fullName);
+      const newUser = await registerWithEmail(email, password, fullName.trim());
+      clearSlowTimer();
+      const targetRoute = newUser.role === 'admin' ? '/admin' : '/dashboard';
       showToast('success', 'Account created! Welcome to Kaarmik Seek.');
-      router.push(newUser.role === 'admin' ? '/admin' : '/dashboard');
+      router.replace(targetRoute);
     } catch (err: any) {
-      let msg = err.message || 'Registration failed.';
-      if (err.code === 'auth/email-already-in-use') msg = 'An account with this email already exists.';
-      setError(msg);
-    } finally {
+      clearSlowTimer();
       setLoading(false);
+      let msg = err.message || 'Registration failed.';
+      if (err.code === 'auth/email-already-in-use') {
+        msg = 'An account with this email already exists. Try signing in.';
+      } else if (err.code === 'auth/weak-password') {
+        msg = 'Password is too weak. Please use at least 6 characters.';
+      }
+      setError(msg);
     }
   };
 
   const handleGoogleSignUp = async () => {
     setError('');
     setGoogleLoading(true);
+    startSlowTimer();
+
     try {
       const newUser = await loginWithGoogle();
+      clearSlowTimer();
+      const targetRoute = newUser.role === 'admin' ? '/admin' : '/dashboard';
       showToast('success', `Welcome, ${newUser.full_name || 'User'}!`);
-      router.push(newUser.role === 'admin' ? '/admin' : '/dashboard');
+      router.replace(targetRoute);
     } catch (err: any) {
+      clearSlowTimer();
+      setGoogleLoading(false);
       if (err.code !== 'auth/popup-closed-by-user') {
         setError(err.message || 'Google sign-up could not be completed.');
       }
-    } finally {
-      setGoogleLoading(false);
     }
   };
+
+  const isInteracting = loading || googleLoading;
 
   return (
     <div
@@ -121,17 +185,37 @@ export default function RegisterPage() {
             </div>
           )}
 
+          {/* Render cold start warming indicator */}
+          {slowNotice && (
+            <div
+              className="rounded-xl px-4 py-3 text-xs flex items-center gap-2.5 animate-pulse"
+              role="status"
+              style={{
+                background: 'var(--color-gold-100)',
+                color: 'var(--color-gold-700)',
+                border: '1px solid var(--color-gold-200)',
+              }}
+            >
+              <Loader2 size={15} className="animate-spin shrink-0 text-amber-700" />
+              <span>Waking up the server, this can take a few seconds on first visit…</span>
+            </div>
+          )}
+
           {/* Google */}
           <button
             type="button"
             id="google-sign-up"
             onClick={handleGoogleSignUp}
-            disabled={googleLoading || loading}
+            disabled={isInteracting}
             className="btn btn-secondary w-full text-sm"
             style={{ justifyContent: 'center', gap: '0.625rem' }}
           >
-            <GoogleIcon />
-            {googleLoading ? 'Connecting…' : 'Continue with Google'}
+            {googleLoading ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <GoogleIcon />
+            )}
+            {googleLoading ? 'Connecting to Google…' : 'Continue with Google'}
           </button>
 
           {/* Divider */}
@@ -164,6 +248,7 @@ export default function RegisterPage() {
                   type="text"
                   required
                   autoComplete="name"
+                  disabled={isInteracting}
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="e.g. Prajwal Ganiga"
@@ -186,6 +271,7 @@ export default function RegisterPage() {
                   type="email"
                   required
                   autoComplete="email"
+                  disabled={isInteracting}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@university.edu"
@@ -208,6 +294,7 @@ export default function RegisterPage() {
                   type={showPw ? 'text' : 'password'}
                   required
                   autoComplete="new-password"
+                  disabled={isInteracting}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="At least 6 characters"
@@ -216,6 +303,7 @@ export default function RegisterPage() {
                 />
                 <button
                   type="button"
+                  disabled={isInteracting}
                   onClick={() => setShowPw(!showPw)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center"
                   style={{ color: 'var(--color-grey-500)', minHeight: '44px', minWidth: '44px' }}
@@ -232,9 +320,11 @@ export default function RegisterPage() {
             <button
               id="create-account-submit"
               type="submit"
-              disabled={loading || googleLoading}
+              disabled={isInteracting}
               className="btn btn-primary w-full text-sm"
+              style={{ justifyContent: 'center', gap: '0.5rem' }}
             >
+              {loading && <Loader2 size={16} className="animate-spin" />}
               {loading ? 'Creating account…' : 'Create account'}
               {!loading && <ArrowRight size={16} />}
             </button>

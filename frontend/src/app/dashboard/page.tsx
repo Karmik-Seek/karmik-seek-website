@@ -12,11 +12,10 @@ import type { Application, Job } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import JobCard from '@/components/JobCard';
 import StatusBadge from '@/components/StatusBadge';
-import { LoadingSpinner } from '@/components/Feedback';
 
 function StatTile({
-  label, value, accent,
-}: { label: string; value: number; accent?: string }) {
+  label, value, accent, loading = false,
+}: { label: string; value?: number; accent?: string; loading?: boolean }) {
   return (
     <div
       className="glass rounded-[var(--radius-card)] p-5 text-center"
@@ -25,15 +24,41 @@ function StatTile({
       <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-ink-muted)' }}>
         {label}
       </p>
-      <p
-        className="text-3xl font-medium tabular-nums"
-        style={{
-          fontFamily: 'var(--font-display)',
-          color: accent || 'var(--color-ink)',
-        }}
-      >
-        {value}
-      </p>
+      {loading ? (
+        <div className="h-9 w-12 mx-auto rounded-lg bg-black/10 animate-pulse my-0.5" />
+      ) : (
+        <p
+          className="text-3xl font-medium tabular-nums"
+          style={{
+            fontFamily: 'var(--font-display)',
+            color: accent || 'var(--color-ink)',
+          }}
+        >
+          {value ?? 0}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function JobCardSkeleton() {
+  return (
+    <div
+      className="glass rounded-[var(--radius-card)] p-6 space-y-4 animate-pulse"
+      style={{ border: '1px solid rgb(255 255 255 / 0.65)' }}
+    >
+      <div className="flex justify-between items-start gap-4">
+        <div className="space-y-2 flex-1">
+          <div className="h-5 bg-black/10 rounded w-3/4" />
+          <div className="h-3.5 bg-black/10 rounded w-1/2" />
+        </div>
+        <div className="h-7 w-16 bg-black/10 rounded-full" />
+      </div>
+      <div className="h-12 bg-black/5 rounded-lg" />
+      <div className="flex justify-between items-center pt-2">
+        <div className="h-4 bg-black/10 rounded w-1/3" />
+        <div className="h-8 bg-black/10 rounded-xl w-24" />
+      </div>
     </div>
   );
 }
@@ -44,13 +69,20 @@ export default function StudentDashboardPage() {
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [recommendedJobs, setRecommendedJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) { router.push('/login'); return; }
-    if (user.role === 'admin') { router.push('/admin'); return; }
+    if (!user) {
+      router.replace('/login');
+      return;
+    }
+    if (user.role === 'admin') {
+      router.replace('/admin');
+      return;
+    }
 
+    // Parallel background fetch: jobs and applications load concurrently without blocking layout render
     Promise.all([
       api.getMyApplications().catch(() => []),
       api.getJobs().catch(() => []),
@@ -60,10 +92,29 @@ export default function StudentDashboardPage() {
         const sorted = [...jobs].sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
         setRecommendedJobs(sorted.slice(0, 3));
       })
-      .finally(() => setLoading(false));
+      .finally(() => setDataLoading(false));
   }, [user, authLoading, router]);
 
-  if (authLoading || loading) return <LoadingSpinner label="Loading your dashboard…" />;
+  // Auth gate check
+  if (!user && authLoading) {
+    return (
+      <div
+        className="min-h-dvh px-4 py-10 sm:px-6 lg:px-8 animate-pulse"
+        style={{ background: 'var(--color-cream-100)' }}
+      >
+        <div className="mx-auto max-w-7xl space-y-8">
+          <div className="h-10 w-64 bg-black/10 rounded-lg" />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-24 bg-black/5 rounded-[var(--radius-card)]" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   const appliedCount = applications.length;
   const underReviewCount = applications.filter((a) => a.status === 'APPLIED').length;
@@ -105,7 +156,7 @@ export default function StudentDashboardPage() {
         </div>
 
         {/* Profile incomplete banner */}
-        {isProfileIncomplete && (
+        {!dataLoading && isProfileIncomplete && (
           <div
             className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-[var(--radius-card)] p-5"
             style={{
@@ -132,12 +183,12 @@ export default function StudentDashboardPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-          <StatTile label="Total applied" value={appliedCount} />
-          <StatTile label="Under review" value={underReviewCount} accent="var(--color-plum-700)" />
-          <StatTile label="Shortlisted" value={shortlistedCount} accent="var(--color-plum-700)" />
-          <StatTile label="Interviews" value={interviewCount} accent="var(--color-gold-700)" />
+          <StatTile label="Total applied" value={appliedCount} loading={dataLoading} />
+          <StatTile label="Under review" value={underReviewCount} accent="var(--color-plum-700)" loading={dataLoading} />
+          <StatTile label="Shortlisted" value={shortlistedCount} accent="var(--color-plum-700)" loading={dataLoading} />
+          <StatTile label="Interviews" value={interviewCount} accent="var(--color-gold-700)" loading={dataLoading} />
           <div className="col-span-2 sm:col-span-1">
-            <StatTile label="Offers" value={selectedCount} accent="var(--color-sage-600)" />
+            <StatTile label="Offers" value={selectedCount} accent="var(--color-sage-600)" loading={dataLoading} />
           </div>
         </div>
 
@@ -155,7 +206,13 @@ export default function StudentDashboardPage() {
               Browse all <ArrowRight size={14} />
             </Link>
           </div>
-          {recommendedJobs.length > 0 ? (
+          {dataLoading ? (
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <JobCardSkeleton />
+              <JobCardSkeleton />
+              <JobCardSkeleton />
+            </div>
+          ) : recommendedJobs.length > 0 ? (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {recommendedJobs.map((job) => (
                 <JobCard key={job.id} job={job} />
@@ -193,7 +250,16 @@ export default function StudentDashboardPage() {
             </Link>
           </div>
 
-          {applications.length === 0 ? (
+          {dataLoading ? (
+            <div
+              className="rounded-[var(--radius-card)] p-6 space-y-4 animate-pulse"
+              style={{ border: '1px solid var(--color-cream-300)', background: 'var(--color-cream-50)' }}
+            >
+              <div className="h-10 bg-black/5 rounded-lg" />
+              <div className="h-10 bg-black/5 rounded-lg" />
+              <div className="h-10 bg-black/5 rounded-lg" />
+            </div>
+          ) : applications.length === 0 ? (
             <div
               className="rounded-[var(--radius-card)] p-8 text-center text-sm"
               style={{

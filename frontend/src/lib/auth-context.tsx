@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import {
   auth,
   googleProvider,
@@ -28,54 +28,118 @@ interface AuthContextType {
   refreshProfile: () => Promise<void>;
 }
 
+const CACHED_USER_KEY = 'karmik_cached_user';
+
+function getInitialCachedUser(): User | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(CACHED_USER_KEY);
+    if (raw) {
+      return JSON.parse(raw) as User;
+    }
+  } catch {
+    // ignore parse or storage errors
+  }
+  return null;
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(getInitialCachedUser);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  // If we already have a cached user, we can immediately declare loading: false for initial layout render
+  const [loading, setLoading] = useState<boolean>(() => !getInitialCachedUser());
 
-  // Sync Firebase user with MongoDB Atlas backend
-  const syncWithBackend = async (fbUser: FirebaseUser, customName?: string, providerName?: string) => {
-    try {
-      const syncResult = await api.syncUser({
-        firebase_uid: fbUser.uid,
-        email: fbUser.email || '',
-        full_name: customName || fbUser.displayName || '',
-        auth_provider: providerName || (fbUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'password'),
-      });
-      setUser(syncResult.user);
-      setProfile(syncResult.profile);
-      return syncResult.user;
-    } catch (err) {
-      console.error('Error syncing user with backend:', err);
-      // Fallback basic user object
-      const fallbackUser: User = {
-        id: fbUser.uid,
-        firebase_uid: fbUser.uid,
-        email: fbUser.email || '',
-        full_name: customName || fbUser.displayName || fbUser.email?.split('@')[0] || '',
-        role: fbUser.email?.toLowerCase() === 'prajwalganiga06@gmail.com' ? 'admin' : 'student',
-        auth_provider: 'firebase',
-      };
-      setUser(fallbackUser);
-      return fallbackUser;
+  // Ref to deduplicate concurrent in-flight sync requests (e.g. login handler + onAuthStateChanged)
+  const syncPromiseRef = useRef<Promise<User> | null>(null);
+  const lastSyncedUidRef = useRef<string | null>(null);
+
+  const updateUserCache = (u: User | null) => {
+    setUser(u);
+    if (typeof window !== 'undefined') {
+      try {
+        if (u) {
+          sessionStorage.setItem(CACHED_USER_KEY, JSON.stringify(u));
+        } else {
+          sessionStorage.removeItem(CACHED_USER_KEY);
+        }
+      } catch {
+        // ignore storage errors
+      }
     }
   };
 
+  // Sync Firebase user with MongoDB Atlas backend (deduplicated & cached)
+  const syncWithBackend = async (
+    fbUser: FirebaseUser,
+    customName?: string,
+    providerName?: string,
+    force: boolean = false
+  ): Promise<User> => {
+    // If not forced and already synced this exact UID and have user in state, return it
+    if (!force && lastSyncedUidRef.current === fbUser.uid && user) {
+      return user;
+    }
+
+    // If an identical sync is already in flight, reuse its promise
+    if (syncPromiseRef.current) {
+      return syncPromiseRef.current;
+    }
+
+    const currentPromise = (async () => {
+      try {
+        const syncResult = await api.syncUser({
+          firebase_uid: fbUser.uid,
+          email: fbUser.email || '',
+          full_name: customName || fbUser.displayName || '',
+          auth_provider: providerName || (fbUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'password'),
+        });
+
+        updateUserCache(syncResult.user);
+        if (syncResult.profile) {
+          setProfile(syncResult.profile);
+        }
+        lastSyncedUidRef.current = fbUser.uid;
+        return syncResult.user;
+      } catch (err) {
+        console.error('Error syncing user with backend:', err);
+        // Fallback basic user object to prevent hard crash if backend is temporarily unreachable
+        const fallbackUser: User = {
+          id: fbUser.uid,
+          firebase_uid: fbUser.uid,
+          email: fbUser.email || '',
+          full_name: customName || fbUser.displayName || fbUser.email?.split('@')[0] || '',
+          role: fbUser.email?.toLowerCase() === 'prajwalganiga06@gmail.com' ? 'admin' : 'student',
+          auth_provider: 'firebase',
+        };
+        updateUserCache(fallbackUser);
+        lastSyncedUidRef.current = fbUser.uid;
+        return fallbackUser;
+      } finally {
+        syncPromiseRef.current = null;
+      }
+    })();
+
+    syncPromiseRef.current = currentPromise;
+    return currentPromise;
+  };
+
   useEffect(() => {
-    // Check fallback session in localStorage if no Firebase session yet
+    // Fallback token in localStorage for direct/admin password bypass
     if (typeof window !== 'undefined') {
       const fallbackToken = localStorage.getItem('karmik_auth_token');
-      if (fallbackToken && !firebaseUser) {
+      if (fallbackToken && !firebaseUser && !user) {
         api.getMe()
           .then((res) => {
-            setUser(res.user);
+            updateUserCache(res.user);
             setProfile(res.profile);
+            setLoading(false);
           })
           .catch(() => {
             localStorage.removeItem('karmik_auth_token');
+            setLoading(false);
           });
       }
     }
@@ -83,12 +147,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
-        await syncWithBackend(fbUser);
+        // Only run sync if not already synced by the explicit login action
+        if (lastSyncedUidRef.current !== fbUser.uid) {
+          await syncWithBackend(fbUser);
+        }
       } else {
         const fallbackToken = typeof window !== 'undefined' ? localStorage.getItem('karmik_auth_token') : null;
         if (!fallbackToken) {
-          setUser(null);
+          updateUserCache(null);
           setProfile(null);
+          lastSyncedUidRef.current = null;
         }
       }
       setLoading(false);
@@ -101,7 +169,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const res = await signInWithPopup(auth, googleProvider);
-      const syncedUser = await syncWithBackend(res.user, res.user.displayName || undefined, 'google');
+      // Explicitly await fast sync and update cache before returning
+      const syncedUser = await syncWithBackend(res.user, res.user.displayName || undefined, 'google', true);
       setLoading(false);
       return syncedUser;
     } catch (error: any) {
@@ -115,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const cleanEmail = email.trim();
     try {
       const res = await signInWithEmailAndPassword(auth, cleanEmail, pass);
-      const syncedUser = await syncWithBackend(res.user, undefined, 'password');
+      const syncedUser = await syncWithBackend(res.user, undefined, 'password', true);
       setLoading(false);
       return syncedUser;
     } catch (err: any) {
@@ -131,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (typeof window !== 'undefined' && fallbackRes.token) {
             localStorage.setItem('karmik_auth_token', fallbackRes.token);
           }
-          setUser(fallbackRes.user);
+          updateUserCache(fallbackRes.user);
           setProfile(fallbackRes.profile);
           setLoading(false);
           return fallbackRes.user;
@@ -149,7 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const res = await createUserWithEmailAndPassword(auth, email.trim(), pass);
-      const syncedUser = await syncWithBackend(res.user, name, 'password');
+      const syncedUser = await syncWithBackend(res.user, name, 'password', true);
       setLoading(false);
       return syncedUser;
     } catch (error: any) {
@@ -167,10 +236,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('karmik_auth_token');
     }
-    await firebaseSignOut(auth).catch(() => {});
-    setUser(null);
+    updateUserCache(null);
     setProfile(null);
     setFirebaseUser(null);
+    lastSyncedUidRef.current = null;
+    await firebaseSignOut(auth).catch(() => {});
   };
 
   const refreshProfile = async (): Promise<void> => {

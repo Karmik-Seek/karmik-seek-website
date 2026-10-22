@@ -77,6 +77,26 @@ export const api = {
     return getApiBaseUrl();
   },
 
+  /**
+   * Silent, non-blocking pre-warm ping to spin up asleep Render instances early
+   * when landing, login, or register pages mount.
+   */
+  warmup() {
+    if (typeof window === 'undefined') return;
+    try {
+      fetch(`${getApiBaseUrl()}/api/health`, {
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-store',
+        keepalive: true,
+      }).catch(() => {
+        // Silent catch: prewarm failure should never disrupt the client
+      });
+    } catch {
+      // ignore
+    }
+  },
+
   async ping() {
     const res = await fetch(`${getApiBaseUrl()}/ping`);
     return res.json();
@@ -96,18 +116,46 @@ export const api = {
     return res.json();
   },
 
-  async syncUser(userData: { firebase_uid: string; email: string; full_name?: string; auth_provider?: string }) {
+  /**
+   * Fast user sync with 12s timeout and 1 automatic retry on cold start network error.
+   */
+  async syncUser(
+    userData: { firebase_uid: string; email: string; full_name?: string; auth_provider?: string },
+    attempt: number = 1
+  ): Promise<{ user: any; profile: any }> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${getApiBaseUrl()}/api/auth/sync`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(userData),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to sync user');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/sync`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(userData),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to sync user');
+      }
+      return await res.json();
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      // Auto-retry once on network timeout or cold start drop
+      if (
+        attempt < 2 &&
+        (err.name === 'AbortError' ||
+          err.message?.includes('Failed to fetch') ||
+          err.message?.includes('NetworkError') ||
+          err.message?.includes('timeout'))
+      ) {
+        await new Promise((r) => setTimeout(r, 600));
+        return this.syncUser(userData, attempt + 1);
+      }
+      throw err;
     }
-    return res.json();
   },
 
   async getMe() {

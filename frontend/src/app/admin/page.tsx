@@ -38,11 +38,11 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      router.push('/login');
+      router.replace('/login');
       return;
     }
     if (user.role !== 'admin') {
-      router.push('/dashboard');
+      router.replace('/dashboard');
       return;
     }
 
@@ -52,7 +52,22 @@ export default function AdminDashboardPage() {
       .finally(() => setLoading(false));
   }, [user, authLoading, router]);
 
-  if (authLoading || loading) return <LoadingSpinner label="Loading admin overview..." />;
+  if (!user && authLoading) {
+    return (
+      <div className="min-h-dvh px-4 py-10 sm:px-6 lg:px-8 animate-pulse" style={{ background: 'var(--color-cream-100)' }}>
+        <div className="mx-auto max-w-7xl space-y-8">
+          <div className="h-10 w-64 bg-black/10 rounded-lg" />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-24 bg-black/5 rounded-[var(--radius-card)]" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   return (
     <div
@@ -103,12 +118,18 @@ export default function AdminDashboardPage() {
               <span className="text-xs font-medium" style={{ color: 'var(--color-ink-muted)' }}>Total Postings</span>
               <Briefcase size={18} style={{ color: 'var(--color-plum-700)' }} />
             </div>
-            <p
-              className="mt-2 text-3xl font-medium tabular-nums"
-              style={{ fontFamily: 'var(--font-display)', color: 'var(--color-ink)' }}
-            >
-              {stats?.total_jobs || 0}
-            </p>
+            <div className="mt-2">
+              {loading ? (
+                <div className="h-9 w-12 rounded bg-black/10 animate-pulse my-0.5" />
+              ) : (
+                <p
+                  className="text-3xl font-medium tabular-nums"
+                  style={{ fontFamily: 'var(--font-display)', color: 'var(--color-ink)' }}
+                >
+                  {stats?.total_jobs || 0}
+                </p>
+              )}
+            </div>
             <p className="text-xs mt-1" style={{ color: 'var(--color-ink-muted)' }}>
               {stats?.active_jobs || 0} active listings
             </p>
@@ -122,12 +143,18 @@ export default function AdminDashboardPage() {
               <span className="text-xs font-medium" style={{ color: 'var(--color-ink-muted)' }}>Total Applicants</span>
               <Users size={18} style={{ color: 'var(--color-plum-500)' }} />
             </div>
-            <p
-              className="mt-2 text-3xl font-medium tabular-nums"
-              style={{ fontFamily: 'var(--font-display)', color: 'var(--color-ink)' }}
-            >
-              {stats?.total_applications || 0}
-            </p>
+            <div className="mt-2">
+              {loading ? (
+                <div className="h-9 w-12 rounded bg-black/10 animate-pulse my-0.5" />
+              ) : (
+                <p
+                  className="text-3xl font-medium tabular-nums"
+                  style={{ fontFamily: 'var(--font-display)', color: 'var(--color-ink)' }}
+                >
+                  {stats?.total_applications || 0}
+                </p>
+              )}
+            </div>
             <p className="text-xs mt-1" style={{ color: 'var(--color-ink-muted)' }}>
               Across all published roles
             </p>
@@ -145,12 +172,18 @@ export default function AdminDashboardPage() {
               <span className="text-xs font-semibold" style={{ color: 'var(--color-plum-700)' }}>Members Directory</span>
               <Users size={18} style={{ color: 'var(--color-plum-700)' }} />
             </div>
-            <p
-              className="mt-2 text-3xl font-medium tabular-nums"
-              style={{ fontFamily: 'var(--font-display)', color: 'var(--color-plum-700)' }}
-            >
-              {stats?.total_users || 0}
-            </p>
+            <div className="mt-2">
+              {loading ? (
+                <div className="h-9 w-12 rounded bg-black/10 animate-pulse my-0.5" />
+              ) : (
+                <p
+                  className="text-3xl font-medium tabular-nums"
+                  style={{ fontFamily: 'var(--font-display)', color: 'var(--color-plum-700)' }}
+                >
+                  {stats?.total_users || 0}
+                </p>
+              )}
+            </div>
             <p className="text-xs mt-1 group-hover:underline" style={{ color: 'var(--color-ink-muted)' }}>
               {stats?.student_count || 0} students · {stats?.admin_count || 0} admins →
             </p>
@@ -167,12 +200,18 @@ export default function AdminDashboardPage() {
               <span className="text-xs font-semibold" style={{ color: 'var(--color-gold-700)' }}>Pending Review</span>
               <Clock size={18} style={{ color: 'var(--color-gold-600)' }} />
             </div>
-            <p
-              className="mt-2 text-3xl font-medium tabular-nums"
-              style={{ fontFamily: 'var(--font-display)', color: 'var(--color-gold-700)' }}
-            >
-              {stats?.pending_reviews || 0}
-            </p>
+            <div className="mt-2">
+              {loading ? (
+                <div className="h-9 w-12 rounded bg-black/10 animate-pulse my-0.5" />
+              ) : (
+                <p
+                  className="text-3xl font-medium tabular-nums"
+                  style={{ fontFamily: 'var(--font-display)', color: 'var(--color-gold-700)' }}
+                >
+                  {stats?.pending_reviews || 0}
+                </p>
+              )}
+            </div>
             <p className="text-xs mt-1" style={{ color: 'var(--color-ink-muted)' }}>
               Awaiting recruiter action
             </p>
@@ -216,7 +255,16 @@ export default function AdminDashboardPage() {
             </Link>
           </div>
 
-          {(!stats?.recent_applications || stats.recent_applications.length === 0) ? (
+          {loading ? (
+            <div
+              className="glass rounded-[var(--radius-card)] p-6 space-y-4 animate-pulse"
+              style={{ border: '1px solid var(--color-cream-300)' }}
+            >
+              <div className="h-10 bg-black/5 rounded-lg" />
+              <div className="h-10 bg-black/5 rounded-lg" />
+              <div className="h-10 bg-black/5 rounded-lg" />
+            </div>
+          ) : (!stats?.recent_applications || stats.recent_applications.length === 0) ? (
             <EmptyState
               icon={Users}
               title="No applications received yet"

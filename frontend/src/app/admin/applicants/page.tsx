@@ -80,7 +80,7 @@ function AdminApplicantsContent() {
   useEffect(() => {
     if (authLoading) return;
     if (!user || user.role !== 'admin') {
-      router.push('/dashboard');
+      router.replace(user ? '/dashboard' : '/login');
       return;
     }
     loadData();
